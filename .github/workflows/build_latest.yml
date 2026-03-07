@@ -106,3 +106,45 @@ jobs:
             embyserver_${VERSION}_amd64.fpk
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update FnDepot Metadata
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/embyserver_${VERSION}_amd64.fpk"
+
+          echo "Updating emby metadata in FnDepot..."
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
+          git clone "https://${{ secrets.RELEASE }}@github.com/${{ github.actor }}/FnDepot.git" fndepot-repo
+          python3 - <<'PY'
+          import pathlib
+          import re
+
+          path = pathlib.Path('fndepot-repo/fnpack.json')
+          text = path.read_text(encoding='utf-8')
+          version = "${{ steps.version.outputs.version }}"
+          download_url = f"https://github.com/${{ github.repository }}/releases/download/v{version}/embyserver_{version}_amd64.fpk"
+
+          block_pattern = r'("emby"\s*:\s*\{.*?\n\s*\})'
+          match = re.search(block_pattern, text, re.S)
+          if not match:
+              raise SystemExit('emby entry not found in fnpack.json')
+
+          block = match.group(1)
+          block = re.sub(r'("version"\s*:\s*")[^"]*(")', rf'\g<1>V{version}\2', block, count=1)
+          block = re.sub(r'("download_url"\s*:\s*")[^"]*(")', rf'\g<1>{download_url}\2', block, count=1)
+          text = text[:match.start()] + block + text[match.end():]
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          cd fndepot-repo
+          git add fnpack.json
+          if git diff-index --quiet HEAD; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update emby metadata to ${VERSION}"
+            git push origin main
+            echo "Successfully updated FnDepot metadata"
+          fi
