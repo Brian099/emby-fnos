@@ -1,4 +1,4 @@
-name: Build Emby beta fnOS Package 
+name: Build Emby prerelease fnOS Package
 
 permissions:
   contents: write
@@ -6,43 +6,51 @@ permissions:
 on:
   schedule:
     - cron: '0 8 * * *'  # 每天 UTC 8:00 (北京时间 16:00)
-  workflow_dispatch:      # 手动触发
+  workflow_dispatch:
     inputs:
       version:
-        description: '版本号 (留空则自动获取最新)'
+        description: '预发布版本号 (留空则自动获取最新 pre-release)'
         required: false
         default: ''
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Get Latest Version
+      - name: Get Latest Prerelease Version
         id: version
         run: |
           if [ -n "${{ github.event.inputs.version }}" ]; then
             VERSION="${{ github.event.inputs.version }}"
           else
-            VERSION=$(curl -sL "https://github.com/MediaBrowser/Emby.Releases/releases" | \
-              grep -oE '(releases/tag/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+[^"]*|Latest)' | \
-              grep -B1 "^Latest$" | head -1 | sed 's|releases/tag/||')
+            VERSION=$(curl -fsSL "https://github.com/MediaBrowser/Emby.Releases/releases" | \
+              grep -oE 'releases/tag/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+[^"#< ]*' | \
+              sed 's|releases/tag/||' | \
+              awk '/-/{print; exit}')
           fi
+
+          if [ -z "$VERSION" ]; then
+            echo "未找到 Emby pre-release 版本"
+            exit 1
+          fi
+
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "检测到版本: $VERSION"
+          echo "检测到预发布版本: $VERSION"
 
       - name: Check if Release Exists
         id: check
         run: |
-          if gh release view "v${{ steps.version.outputs.version }}" &>/dev/null; then
+          VERSION="${{ steps.version.outputs.version }}"
+          if gh release view "pre-${VERSION}" &>/dev/null; then
             echo "exists=true" >> $GITHUB_OUTPUT
-            echo "版本 ${{ steps.version.outputs.version }} 已存在，跳过构建"
+            echo "预发布版本 $VERSION 已存在，跳过构建"
           else
             echo "exists=false" >> $GITHUB_OUTPUT
-            echo "版本 ${{ steps.version.outputs.version }} 不存在，开始构建"
+            echo "预发布版本 $VERSION 不存在，开始构建"
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -51,58 +59,62 @@ jobs:
         if: steps.check.outputs.exists == 'false'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          
-          echo "==> 下载 Emby Server $VERSION"
-          curl -L -o emby.deb "https://github.com/MediaBrowser/Emby.Releases/releases/download/${VERSION}/emby-server-deb_${VERSION}_amd64.deb"
+          PACKAGE_NAME="embyserver_${VERSION}_pre_amd64.fpk"
+
+          echo "==> 下载 Emby Server pre-release $VERSION"
+          curl -fL -o emby.deb "https://github.com/MediaBrowser/Emby.Releases/releases/download/${VERSION}/emby-server-deb_${VERSION}_amd64.deb"
           ls -lh emby.deb
-          
+
           echo "==> 解压 deb"
           ar -x emby.deb
           mkdir -p extracted
           tar -xf data.tar.xz -C extracted
           du -sh extracted/opt/emby-server/*
-          
+
           echo "==> 构建 app.tgz"
           mkdir -p app_root
           cp -a extracted/opt/emby-server/* app_root/
           mkdir -p app_root/config app_root/ui/images
-          
+
           cp fnos/EmbyServer.sc app_root/
           cp fnos/config/* app_root/config/
           cp -a fnos/ui/* app_root/ui/
           cp fnos/bin/emby-server app_root/bin/emby-server
           chmod +x app_root/bin/emby-server
-          
+
           du -sh app_root/*
           cd app_root && tar -czf ../app.tgz . && cd ..
           ls -lh app.tgz
-          
+
           echo "==> 构建 fpk"
           CHECKSUM=$(md5sum app.tgz | cut -d' ' -f1)
-          
+
           mkdir -p package
           mv app.tgz package/
           cp -a fnos/cmd fnos/config fnos/wizard fnos/ICON*.PNG package/
-          
+
           sed "s/^version.*/version         = ${VERSION}/" fnos/manifest > package/manifest
           sed -i "s/^checksum.*/checksum        = ${CHECKSUM}/" package/manifest
-          
-          cd package && tar -czf ../embyserver_${VERSION}_amd64.fpk * && cd ..
-          
+
+          cd package && tar -czf ../${PACKAGE_NAME} * && cd ..
+
           echo "==> 完成"
-          ls -lh embyserver_${VERSION}_amd64.fpk
+          ls -lh "${PACKAGE_NAME}"
 
       - name: Create Release
         if: steps.check.outputs.exists == 'false'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          gh release create "v${VERSION}" \
-            --title "Emby Server ${VERSION} for fnOS" \
-            --notes "自动构建的 fnOS 安装包
+          PACKAGE_NAME="embyserver_${VERSION}_pre_amd64.fpk"
+          gh release create "pre-${VERSION}" \
+            --prerelease \
+            --title "Emby Server ${VERSION} pre-release for fnOS" \
+            --notes "自动构建的 fnOS 预发布安装包
 
           - 基于 [Emby Server ${VERSION}](https://github.com/MediaBrowser/Emby.Releases/releases/tag/${VERSION})
+          - 类型: pre-release
           - 架构: x86_64 (amd64)
           - 平台: fnOS" \
-            embyserver_${VERSION}_amd64.fpk
+            "${PACKAGE_NAME}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
