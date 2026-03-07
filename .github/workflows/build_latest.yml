@@ -113,7 +113,7 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/embyserver_${VERSION}_amd64.fpk"
 
-          echo "Updating emby metadata in FnDepot..."
+          echo "Updating Emby metadata in FnDepot..."
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
 
@@ -127,10 +127,10 @@ jobs:
           version = "${{ steps.version.outputs.version }}"
           download_url = f"https://github.com/${{ github.repository }}/releases/download/v{version}/embyserver_{version}_amd64.fpk"
 
-          block_pattern = r'("emby"\s*:\s*\{.*?\n\s*\})'
+          block_pattern = r'("Emby"\s*:\s*\{.*?\n\s*\})'
           match = re.search(block_pattern, text, re.S)
           if not match:
-              raise SystemExit('emby entry not found in fnpack.json')
+              raise SystemExit('Emby entry not found in fnpack.json')
 
           block = match.group(1)
           block = re.sub(r'("version"\s*:\s*")[^"]*(")', rf'\g<1>V{version}\2', block, count=1)
