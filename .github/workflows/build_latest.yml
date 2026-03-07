@@ -92,6 +92,30 @@ jobs:
           echo "==> 完成"
           ls -lh embyserver_${VERSION}_amd64.fpk
 
+      - name: Upload to FnDepot Repository
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          PACKAGE_NAME="embyserver_${VERSION}_amd64.fpk"
+
+          echo "Uploading latest fpk to FnDepot repository..."
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+
+          git clone "https://${{ secrets.RELEASE }}@github.com/${{ github.actor }}/FnDepot.git" fndepot-repo
+          mkdir -p fndepot-repo/emby_latest
+          cp "${PACKAGE_NAME}" fndepot-repo/emby_latest/embyserver.fpk
+
+          cd fndepot-repo
+          git add emby_latest/embyserver.fpk
+          if git diff-index --quiet HEAD; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update emby latest package to ${VERSION}"
+            git push origin main
+            echo "Successfully uploaded latest package to FnDepot repository"
+          fi
+
       - name: Create Release
         if: steps.check.outputs.exists == 'false'
         run: |
