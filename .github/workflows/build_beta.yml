@@ -1,4 +1,4 @@
-name: Build Emby fnOS Package
+name: Build Emby beta fnOS Package 
 
 permissions:
   contents: write
