@@ -27,7 +27,8 @@ jobs:
           if [ -n "${{ github.event.inputs.version }}" ]; then
             VERSION="${{ github.event.inputs.version }}"
           else
-            VERSION=$(curl -fsSL "https://api.github.com/repos/MediaBrowser/Emby.Releases/releases" | python3 -c "import json, sys; releases = json.load(sys.stdin); print(next((r['tag_name'] for r in releases if r.get('prerelease') and r.get('tag_name')), ''))")
+            # 查找包含 amd64.deb 的最新预发布版本
+            VERSION=$(curl -fsSL "https://api.github.com/repos/MediaBrowser/Emby.Releases/releases" | python3 -c "import json, sys; releases = json.load(sys.stdin); print(next((r['tag_name'] for r in releases if r.get('prerelease') and any(a['name'] == f'emby-server-deb_{r['tag_name']}_amd64.deb' for a in r.get('assets', []))), ''))")
           fi
 
           if [ -z "$VERSION" ]; then

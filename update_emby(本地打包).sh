@@ -22,12 +22,13 @@ get_latest_version() {
     info "获取最新版本信息..."
     
     if [ "$EMBY_VERSION" = "latest" ] || [ "$EMBY_VERSION" = "beta" ]; then
-        local html=$(curl -sL "https://github.com/MediaBrowser/Emby.Releases/releases" 2>/dev/null)
+        local is_prerelease="False"
+        [ "$EMBY_VERSION" = "beta" ] && is_prerelease="True"
         
-        if [ "$EMBY_VERSION" = "latest" ]; then
-            EMBY_VERSION=$(echo "$html" | grep -oE '(releases/tag/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+[^"]*|Latest)' | grep -B1 "^Latest$" | head -1 | sed 's|releases/tag/||')
-        else
-            EMBY_VERSION=$(echo "$html" | grep -oE 'releases/tag/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1 | sed 's|releases/tag/||')
+        EMBY_VERSION=$(curl -fsSL "https://api.github.com/repos/MediaBrowser/Emby.Releases/releases" 2>/dev/null | python3 -c "import json, sys; is_pr = sys.argv[1] == 'True'; releases = json.load(sys.stdin); print(next((r['tag_name'] for r in releases if r.get('prerelease') == is_pr and any(a['name'] == f'emby-server-deb_{r[\"tag_name\"]}_amd64.deb' for a in r.get('assets', []))), ''))" "$is_prerelease" 2>/dev/null)
+        
+        if [ -z "$EMBY_VERSION" ]; then
+            error "无法获取有效的版本信息（可能因为 GitHub API 频率限制或发布版本暂无 amd64.deb 附件）"
         fi
     fi
     
