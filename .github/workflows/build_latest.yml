@@ -132,7 +132,7 @@ jobs:
               raise SystemExit('Emby entry not found in fnpack.json')
 
           block = match.group(1)
-          block = re.sub(r'("version"\s*:\s*")[^"]*(")', rf'\g<1>V{version}\2', block, count=1)
+          block = re.sub(r'("version"\s*:\s*")[^"]*(")', rf'\g<1>{version}\2', block, count=1)
           block = re.sub(r'("download_url"\s*:\s*")[^"]*(")', rf'\g<1>{download_url}\2', block, count=1)
           text = text[:match.start()] + block + text[match.end():]
           path.write_text(text, encoding='utf-8')
